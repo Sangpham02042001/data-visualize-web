@@ -4,6 +4,7 @@ const csv = require('csv-parser')
 const XLSX = require('xlsx')
 
 const upload = async (req, res) => {
+  console.log('uploaddd');
   const form = formidable.IncomingForm()
   form.keepExtensions = true
   form.parse(req, async (err, fields, files) => {
@@ -80,6 +81,7 @@ const upload = async (req, res) => {
             });
           break;
         default:
+          console.log('error file');
           return res.status(400).json({
             error: "You must upload csv/tsv/xlsx"
           })
