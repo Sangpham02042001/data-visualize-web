@@ -2,33 +2,73 @@ const formidable = require('formidable')
 const fs = require('fs')
 const csv = require('csv-parser')
 const XLSX = require('xlsx')
+const readline = require('readline');
+const { v4 } = require('uuid')
+
+const convertCsvTsv = (filePath, fileName, fileCached, callback) => {
+  let fileType = fileName.split('.')[fileName.split('.').length - 1]
+  let separator = fileType === 'csv' ? ',' : '\t'
+  let writeStream = fs.createWriteStream(`./temp/${fileCached}`)
+  let fileLength = 0
+  fs.createReadStream(filePath)
+    .pipe(csv({
+      separator,
+      mapHeaders: ({ header, index }) => {
+        if (!header) {
+          return `filed${index + 1}`
+        }
+        return header
+      },
+    }))
+    .on('data', (data) => {
+      fileLength++
+      writeStream.write(JSON.stringify(data) + '\n')
+    })
+    .on('end', () => {
+      callback(fileLength)
+    })
+}
 
 const upload = async (req, res) => {
-  console.log('uploaddd');
   const form = formidable.IncomingForm()
   form.keepExtensions = true
   form.parse(req, async (err, fields, files) => {
     if (files.file) {
       let fileName = files.file.name
       let fileType = fileName.split('.')[fileName.split('.').length - 1]
+      let fileCached = `${fileName}-${v4()}.txt`
       switch (fileType) {
         case "csv":
-          let results = []
-          fs.createReadStream(files.file.path)
-            .pipe(csv({
-              mapHeaders: ({ header, index }) => {
-                if (!header) {
-                  return `filed${index + 1}`
-                }
-                return header
-              }
-            }))
-            .on('data', (data) => {
-              results.push(data)
+          convertCsvTsv(files.file.path, fileName, fileCached, (fileLength) => {
+            let data = [], count = 0
+            const rl = readline.createInterface({
+              input: fs.createReadStream(`./temp/${fileCached}`)
             })
-            .on('end', () => {
-              return res.status(200).json(results)
-            });
+            let offset = 0, fragFlag = false
+            rl.on('line', (line) => {
+              data.push(JSON.parse(line))
+              count++
+              if (count >= fileLength) {
+                offset = 0
+                fragFlag = false
+                rl.close()
+              }
+              if (count >= 100) {
+                offset = 100
+                fragFlag = true
+                rl.close()
+              }
+            })
+            rl.on('close', () => {
+              return res.status(200).json({
+                fileCached,
+                fileLength,
+                data,
+                fragFlag,
+                offset
+              })
+            })
+          })
           break;
         case "xlsx":
           const workbookUpload = XLSX.readFile(files.file.path)
@@ -64,21 +104,36 @@ const upload = async (req, res) => {
           })
           return res.status(200).json(data)
         case "tsv":
-          let result = []
-          fs.createReadStream(files.file.path)
-            .pipe(csv({
-              separator: '\t',
-              mapHeaders: ({ header, index }) => {
-                if (!header) {
-                  return `filed${index + 1}`
-                }
-                return header
+          convertCsvTsv(files.file.path, fileName, fileCached, (fileLength) => {
+            let data = [], count = 0
+            const rl = readline.createInterface({
+              input: fs.createReadStream(`./temp/${fileCached}`)
+            })
+            let offset = 0, fragFlag = false
+            rl.on('line', (line) => {
+              data.push(JSON.parse(line))
+              count++
+              if (count >= fileLength) {
+                offset = 0
+                fragFlag = false
+                rl.close()
               }
-            }))
-            .on('data', (data) => result.push(data))
-            .on('end', () => {
-              return res.status(200).json(result)
-            });
+              if (count >= 100) {
+                offset = 100
+                fragFlag = true
+                rl.close()
+              }
+            })
+            rl.on('close', () => {
+              return res.status(200).json({
+                fileCached,
+                fileLength,
+                data,
+                fragFlag,
+                offset
+              })
+            })
+          })
           break;
         default:
           console.log('error file');
