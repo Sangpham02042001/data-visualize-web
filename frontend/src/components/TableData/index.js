@@ -1,169 +1,147 @@
-import React, { useMemo } from 'react';
-import { useTable, usePagination } from 'react-table';
-import './tableData.style.scss';
+import React, {
+    useState,
+    useReducer,
+    useEffect,
+    useMemo,
+} from 'react';
+import {nanoid } from 'nanoid';
+import Paper from '@material-ui/core/Paper';
+import {
+    VirtualTableState,
+    createRowCache,
+} from '@devexpress/dx-react-grid';
+import {
+    Grid,
+    VirtualTable,
+    TableHeaderRow,
+} from '@devexpress/dx-react-grid-material-ui';
+import { axiosInstance } from '../../utils/axios.utils';
 
+const VIRTUAL_PAGE_SIZE = 50;
+const buildQueryString = (skip, take, fileCached) => (
+    `/api/scroll?fileCached=${fileCached}&offset=${skip}&range=${take}`
+);
 
-export default function TableData({ fileData, updateMyData}) {
-    
+const initialState = {
+    rows: [],
+    skip: 0,
+    requestedSkip: 0,
+    take: VIRTUAL_PAGE_SIZE * 2,
+    totalCount: 0,
+    loading: false,
+    lastQuery: '',
+};
 
-    const data = useMemo(
-        () => fileData
-        , [fileData])
+function reducer(state, { type, payload }) {
+    switch (type) {
+        case 'UPDATE_ROWS':
+            return {
+                ...state,
+                ...payload,
+                loading: false,
+            };
+        case 'START_LOADING':
+            return {
+                ...state,
+                requestedSkip: payload.requestedSkip,
+                take: payload.take,
+            };
+        case 'REQUEST_ERROR':
+            return {
+                ...state,
+                loading: false,
+            };
+        case 'FETCH_INIT':
+            return {
+                ...state,
+                loading: true,
+            };
+        case 'UPDATE_QUERY':
+            return {
+                ...state,
+                lastQuery: payload,
+            };
+        default:
+            return state;
+    }
+}
 
-    const columns = useMemo(
-        () => {
-            const keys = [];
-            for (let key in fileData[0]) {
-                keys.push({
-                    Header: key,
-                    accessor: key,
-                })
+export default function Test({ fileCached, fileLength }) {
+    const [state, dispatch] = useReducer(reducer, initialState);
+    const [columns, setColumns] = useState([]);
+
+    const cache = useMemo(() => createRowCache(VIRTUAL_PAGE_SIZE), []);
+    const updateRows = (skip, count, newTotalCount) => {
+        dispatch({
+            type: 'UPDATE_ROWS',
+            payload: {
+                skip,
+                rows: cache.getRows(skip, count),
+                totalCount: fileLength,
+            },
+        });
+    };
+
+    const getRemoteRows = (requestedSkip, take) => {
+        dispatch({ type: 'START_LOADING', payload: { requestedSkip, take } });
+    };
+
+    const loadData = () => {
+        const {
+            requestedSkip, take, lastQuery, loading,
+        } = state;
+        const query = buildQueryString(requestedSkip, take, fileCached);
+        if (query !== lastQuery && !loading) {
+            const cached = cache.getRows(requestedSkip, take);
+            if (cached.length === take) {
+                updateRows(requestedSkip, take);
+            } else {
+
+                dispatch({ type: 'FETCH_INIT' });
+                axiosInstance.get(query)
+                    .then((res) => {
+                        const {data} = res.data;
+                        cache.setRows(requestedSkip, data);
+                        updateRows(requestedSkip, take);
+                        const cols = Object.keys(data[0]).map((key) => {
+                            return {
+                                name: key,
+                                title: key,
+                                getCellValue: row => row[key]
+                            }
+                        })
+                        
+                        setColumns(cols);
+                    })
+                    .catch(() => dispatch({ type: 'REQUEST_ERROR' }));
             }
-            return keys;
+            dispatch({ type: 'UPDATE_QUERY', payload: query });
         }
-        , [fileData])
+    };
 
-
-    const EditableCell = ({
-        value: initialValue,
-        row: { index },
-        column: { id },
-        updateMyData, // This is a custom function that we supplied to our table instance
-    }) => {
-        // We need to keep and update the state of the cell normally
-        const [value, setValue] = React.useState(initialValue)
-
-        const onChange = e => {
-            console.log(value);
-            setValue(e.target.value)
-        }
-
-        // We'll only update the external data when the input is blurred
-        const onBlur = () => {
-            updateMyData(index, id, value)
-        }
-
-        // If the initialValue is changed external, sync it up with our state
-        React.useEffect(() => {
-            setValue(initialValue)
-        }, [initialValue])
-
-        return <input value={value} onChange={onChange} onBlur={onBlur} />
-    }
-
-    // Set our editable cell renderer as the default Cell renderer
-    const defaultColumn = {
-        Cell: EditableCell,
-    }
+    useEffect(() => loadData());
 
     const {
-        getTableProps,
-        getTableBodyProps,
-        headerGroups,
-        prepareRow,
-        page,
-        canPreviousPage,
-        canNextPage,
-        pageOptions,
-        pageCount,
-        gotoPage,
-        nextPage,
-        previousPage,
-        setPageSize,
-        state: { pageIndex, pageSize }
-    } = useTable({
-        columns,
-        data,
-        defaultColumn,
-        updateMyData
-    }, usePagination)
-
-
+        rows, skip, totalCount, loading,
+    } = state;
     return (
-        <>
-            <table {...getTableProps()} >
-                <thead>
-                    {headerGroups.map(headerGroup => (
-                        <tr {...headerGroup.getHeaderGroupProps()}>
-                            {headerGroup.headers.map(column => (
-                                <th
-                                    {...column.getHeaderProps()}
-                                    style={{
-                                        fontWeight: 'bold',
-                                    }}
-                                >
-                                    {column.render('Header')}
-                                </th>
-                            ))}
-                        </tr>
-                    ))}
-                </thead>
-                <tbody {...getTableBodyProps()}>
-                    {page.map(row => {
-                        prepareRow(row)
-                        return (
-                            <tr {...row.getRowProps()}>
-                                {row.cells.map(cell => {
-                                    return (
-                                        <td
-                                            {...cell.getCellProps()}
-                                            style={{
-                                                padding: '10px',
-                                            }}
-                                        >
-                                            {cell.render('Cell')}
-                                        </td>
-                                    )
-                                })}
-                            </tr>
-                        )
-                    })}
-                </tbody>
-            </table>
-            <div className="pagination">
-                <button onClick={() => gotoPage(0)} disabled={!canPreviousPage}>
-                    {"<<"}
-                </button>{" "}
-                <button onClick={() => previousPage()} disabled={!canPreviousPage}>
-                    {"<"}
-                </button>{" "}
-                <button onClick={() => nextPage()} disabled={!canNextPage}>
-                    {">"}
-                </button>{" "}
-                <button onClick={() => gotoPage(pageCount - 1)} disabled={!canNextPage}>
-                    {">>"}
-                </button>{" "}
-                <span>
-                    Page{" "}
-                    <strong>
-                         {(pageIndex + 1)} of  {pageOptions && pageOptions.length}
-                    </strong>{" "}
-                </span>
-                <span>
-                    | Go to page:{" "}
-                    <input
-                        type="number"
-                        defaultValue={pageIndex + 1}
-                        onChange={(e) => {
-                            const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                            gotoPage(page);
-                        }}
-                        style={{ width: "100px" }}
-                    />
-                </span>{" "}
-                <select
-                    value={pageSize}
-                    onChange={(e) => {
-                        setPageSize(Number(e.target.value));
-                    }}
-                >
-                    {[10, 20, 30, 40, 50].map((pageSize) => (
-                        <option key={pageSize} value={pageSize}>
-                            Show {pageSize}
-                        </option>
-                    ))}
-                </select>
-            </div>
-        </>
-    )
-}
+        <Paper>
+            <Grid
+                rows={rows}
+                columns={columns}
+                getRowId={() => nanoid()}
+            >
+                <VirtualTableState
+                    infiniteScrolling
+                    loading={loading}
+                    totalRowCount={totalCount}
+                    pageSize={VIRTUAL_PAGE_SIZE}
+                    skip={skip}
+                    getRows={getRemoteRows}
+                />
+                <VirtualTable />
+                <TableHeaderRow />
+            </Grid>
+        </Paper>
+    );
+};

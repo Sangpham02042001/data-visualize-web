@@ -1,58 +1,46 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { axiosInstance } from '../../utils/axios.utils';
 
-export const getFileData = createAsyncThunk('file/getFileData', async ({ fileSelected }) => {
+export const uploadFile = createAsyncThunk('file/uploadFile', async ({ fileSelected, onUploadProgress }) => {
 
   const formData = new FormData();
   formData.append("file", fileSelected);
-  console.log('gete');
-  const onUploadProgress = (progressEvent) => {
-    if (progressEvent.total) {
-      console.log(progressEvent.loaded / progressEvent.total);
-    } else {
-      console.log(progressEvent.loaded);
-    }
-  }
   const response = await axiosInstance.post('/api/upload', formData, {onUploadProgress});
   console.log(response.data);
   return response.data;
-
-
 })
+
 
 export const file = createSlice({
   name: 'file',
   initialState: {
-    fileData: [],
+    fileLength: 0,
+    loading: false,
+    error: false,
+    fileCached: null,
   },
   reducers: {
-    setFileData: (state, action) => {
-      const {rowIndex, columnId, value} = action.payload;
-      state.fileData.map((row, index) => {
-        if (index === rowIndex) {
-          return {
-            ...state.fileData[rowIndex],
-            [columnId]: value,
-          }
-        }
-        return row
-      })
-    }
+
   },
   extraReducers: {
-    [getFileData.pending]: (state, action) => {
-      console.log('pendinggg');
+    [uploadFile.pending]: (state, action) => {
+      state.loading = true;
+      console.log('pendinggg', action);
     },
-    [getFileData.fulfilled]: (state, action) => {
-      state.fileData = action.payload;
-      console.log(state.fileData);
+    [uploadFile.fulfilled]: (state, action) => {
+      console.log(action.payload);
+      const { fileCached, fileLength } = action.payload;
+      state.fileCached = fileCached;
+      state.fileLength = fileLength;
+      state.loading = false;
     },
-    [getFileData.rejected]: (state, action) => {
-      console.log("Could not get data!")
+    [uploadFile.rejected]: (state, action) => {
+      console.log("Could not upload file!");
+      state.loading = false;
+      state.error = true;
     }
 
   }
 })
 
-export const { setFileData } = file.actions;
 export default file.reducer;

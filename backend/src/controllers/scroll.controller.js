@@ -2,6 +2,7 @@ const fs = require('fs');
 const readline = require('readline');
 
 const scroll = async (req, res) => {
+  console.log(req.query)
   let { fileCached, offset, range } = req.query
   console.log(req.query)
   let file = `./temp/${fileCached}`

@@ -63,7 +63,6 @@ const upload = async (req, res) => {
               return res.status(200).json({
                 fileCached,
                 fileLength,
-                data,
                 fragFlag,
                 offset
               })
@@ -128,7 +127,6 @@ const upload = async (req, res) => {
               return res.status(200).json({
                 fileCached,
                 fileLength,
-                data,
                 fragFlag,
                 offset
               })

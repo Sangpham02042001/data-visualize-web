@@ -1,16 +1,23 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Form, Button, Container, Row, Col } from 'react-bootstrap';
-import { getFileData, setFileData } from '../../store/reducer/file.reducer';
-import TableData from '../TableData';
+import { Form, Button, Container, Row, Col, ProgressBar } from 'react-bootstrap';
+import { uploadFile } from '../../store/reducer/file.reducer';
 
 
 
 export default function UploadFile() {
     const dispatch = useDispatch();
-    const fileData = useSelector(state => state.fileReducer.fileData);
     const [fileSelected, setFileSelected] = useState();
+    const [progress, setProgress] = useState(0);
+    const { loading, error } = useSelector(state => state.fileReducer);
 
+    const onUploadProgress = (progressEvent) => {
+        if (progressEvent.total) {
+            setProgress((progressEvent.loaded / progressEvent.total * 100).toFixed(0));
+        } else {
+            setProgress(progressEvent.loaded);
+        }
+    }
 
     const onUploadFile = (event) => {
         setFileSelected(event.target.files[0]);
@@ -18,18 +25,17 @@ export default function UploadFile() {
     }
 
     const handleUploadFile = async (event) => {
-        console.log(fileSelected);
-        dispatch(getFileData({ fileSelected }));
+        setFileSelected(null);
+        dispatch(uploadFile({ fileSelected, onUploadProgress }));
     }
 
-    const updateData = (rowIndex, columnId, value) => {
-        setFileData({ rowIndex, columnId, value })
-    }
+
 
     return (
         <div className="upload-file">
+            
+            <Container style={{textAlign: "center"}}>
             <h2>Upload</h2>
-            <Container>
                 <Row className="justify-content-md-center">
                     <Col lg="4">
                         <Form>
@@ -39,21 +45,21 @@ export default function UploadFile() {
                         </Form>
                     </Col>
                 </Row>
-                <Row>
+                <Row className="justify-content-md-center">
                     <Col>
                         <Button variant="primary" disabled={!fileSelected} onClick={handleUploadFile}>Upload</Button>
                     </Col>
                 </Row>
-                <Row></Row>
                 <Row className="justify-content-md-center">
-                    {fileData.length > 0 &&
-                        <>
-
-                            <TableData fileData={fileData}
-                                updateMyData={updateData}
-                            />
-                        </>
-                    }
+                    <Col style={{ margin: "30px" }}>
+                        {loading &&
+                            <>
+                                <ProgressBar now={progress} label={`${progress}%`} />
+                                <div>Loading.....</div>
+                            </>
+                        }
+                        {error && <div>UPLOAD ERROR</div>}
+                    </Col>
                 </Row>
             </Container>
 
